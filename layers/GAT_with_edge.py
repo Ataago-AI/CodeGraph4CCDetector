@@ -4,6 +4,7 @@ from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 
+device = "cpu"
 
 class GraphAttentionLayer(nn.Module):
     """
@@ -18,9 +19,9 @@ class GraphAttentionLayer(nn.Module):
         self.concat = concat
         self.training = training
 
-        self.W = nn.Parameter(torch.empty(size=(in_features, out_features)).to('cuda'))
+        self.W = nn.Parameter(torch.empty(size=(in_features, out_features)).to(device))
         nn.init.xavier_uniform_(self.W.data, gain=1.414)
-        self.a = nn.Parameter(torch.empty(size=(3*out_features, 1)).to('cuda'))
+        self.a = nn.Parameter(torch.empty(size=(3*out_features, 1)).to(device))
         nn.init.xavier_uniform_(self.a.data, gain=1.414)
 
         self.leakyrelu = nn.LeakyReLU(self.alpha)

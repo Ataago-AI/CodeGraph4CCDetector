@@ -11,6 +11,9 @@ from layers.global_self_att import GlobalSelfAttentionLayer
 from torch_geometric.nn import (global_mean_pool, JumpingKnowledge)
 from torch_geometric.nn.glob import GlobalAttention
 
+
+device = 'cpu'
+
 class CodeCloneDetection(nn.Module):
     def __init__(self, num_layers, hidden, nheads, nclass, dropout, alpha, training):
         super(CodeCloneDetection, self).__init__()
@@ -66,7 +69,7 @@ class CodeCloneDetection(nn.Module):
         h1 = self.h(features1)
         #print()
         #print("input ",h1.shape)
-        batch1 = torch.zeros(len(h1), dtype=torch.int64, device='cuda')
+        batch1 = torch.zeros(len(h1), dtype=torch.int64, device=device)
        
         hs1 = [self.gpool1(h1, batch1)]
         #h1 = F.dropout(h1, self.dropout, training=self.training)
@@ -77,7 +80,7 @@ class CodeCloneDetection(nn.Module):
         
         #print("layer1 ",h1.shape, edgesAttr1.shape)
         h1, edge_index1, edgesAttr1, batch1, _ = self.edge_pool1(h1, edge_index1, edgesAttr1, batch=batch1)
-        batch1 = torch.zeros(len(h1), dtype=torch.int64, device='cuda')
+        batch1 = torch.zeros(len(h1), dtype=torch.int64, device=device)
         #print("h1",h1.shape)
         hs1 += [self.gpool2(h1, batch1)]
         #h1 = F.dropout(h1, self.dropout, training=self.training)
@@ -87,7 +90,7 @@ class CodeCloneDetection(nn.Module):
 
         #print("layer2 ",h1.shape, edgesAttr1.shape)
         h1, edge_index1, edgesAttr1, batch1, _ = self.edge_pool2(h1, edge_index1, edgesAttr1, batch=batch1)
-        batch1 = torch.zeros(len(h1), dtype=torch.int64, device='cuda')
+        batch1 = torch.zeros(len(h1), dtype=torch.int64, device=device)
         
         hs1 += [self.gpool3(h1, batch1)]
         
@@ -106,7 +109,7 @@ class CodeCloneDetection(nn.Module):
         #code patch 2
         h2 = self.h(features2)
         #print("input ",h2.shape)
-        batch2 = torch.zeros(len(h2), dtype=torch.int64, device='cuda')
+        batch2 = torch.zeros(len(h2), dtype=torch.int64, device=device)
         hs2 = [self.gpool1(h2, batch2)]
         #h2 = F.dropout(h2, self.dropout, training=self.training)
 
@@ -116,7 +119,7 @@ class CodeCloneDetection(nn.Module):
 
         #print("layer1 ",h2.shape, edgesAttr2.shape)
         h2, edge_index2, edgesAttr2, batch2, _ = self.edge_pool1(h2, edge_index2, edgesAttr2, batch=batch2)
-        batch2 = torch.zeros(len(h2), dtype=torch.int64, device='cuda')
+        batch2 = torch.zeros(len(h2), dtype=torch.int64, device=device)
         hs2 += [self.gpool2(h2, batch2)]
         #h2 = F.dropout(h2, self.dropout, training=self.training)
 
@@ -125,7 +128,7 @@ class CodeCloneDetection(nn.Module):
 
         #print("layer2 ",h2.shape, edgesAttr2.shape)
         h2, edge_index2, edgesAttr2, batch2, _ = self.edge_pool2(h2, edge_index2, edgesAttr2, batch=batch2)
-        batch2 = torch.zeros(len(h2), dtype=torch.int64, device='cuda')
+        batch2 = torch.zeros(len(h2), dtype=torch.int64, device=device)
         hs2 += [self.gpool3(h2, batch2)]
         
         '''
@@ -145,11 +148,11 @@ class CodeCloneDetection(nn.Module):
         return out
 
     def _get_adj_node2node(self, h, edge_index, edge_attr):
-        indices = edge_index.to('cuda')
-        values = torch.ones((len(edge_index[0]))).to('cuda')
+        indices = edge_index.to(device)
+        values = torch.ones((len(edge_index[0]))).to(device)
         adjacency = torch.sparse.FloatTensor(indices, values, torch.Size((len(h),len(h)))).to_dense()
 
-        node2node_features = torch.zeros(len(h)*len(h),edge_attr.size()[1]).to('cuda')
+        node2node_features = torch.zeros(len(h)*len(h),edge_attr.size()[1]).to(device)
         for i in range(len(edge_index[0])):
             node2node_features[len(h)*edge_index[0][i]+edge_index[1][i]] = edge_attr[i]
         # 以上 邻接矩阵 和 node2node_features 在多头注意力机制中是一样的，只计算一次就好，不一样的是 W 和 a

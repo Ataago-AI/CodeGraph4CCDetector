@@ -1,10 +1,50 @@
 from collections import namedtuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch_scatter import scatter_add
-from torch_sparse import coalesce
-from torch_geometric.utils import softmax
+# from torch_scatter import scatter_add
+# from torch import scatter_add
+# from torch_sparse import coalesce
+from torch_geometric.utils import softmax, coalesce
+
+device = 'cpu'
+
+
+def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):
+    if dim < 0:
+        dim = other.dim() + dim
+    if src.dim() == 1:
+        for _ in range(0, dim):
+            src = src.unsqueeze(0)
+    for _ in range(src.dim(), other.dim()):
+        src = src.unsqueeze(-1)
+    src = src.expand(other.size())
+    return src
+    
+def scatter_sum(src: torch.Tensor, index: torch.Tensor, dim: int = -1,
+                out: Optional[torch.Tensor] = None,
+                dim_size: Optional[int] = None) -> torch.Tensor:
+    index = broadcast(index, src, dim)
+    if out is None:
+        size = list(src.size())
+        if dim_size is not None:
+            size[dim] = dim_size
+        elif index.numel() == 0:
+            size[dim] = 0
+        else:
+            size[dim] = int(index.max()) + 1
+        out = torch.zeros(size, dtype=src.dtype, device=src.device)
+        return out.scatter_add_(dim, index, src)
+    else:
+        return out.scatter_add_(dim, index, src)
+
+
+def scatter_add(src: torch.Tensor, index: torch.Tensor, dim: int = -1,
+                out: Optional[torch.Tensor] = None,
+                dim_size: Optional[int] = None) -> torch.Tensor:
+    return scatter_sum(src, index, dim, out, dim_size)
+
 
 
 class EdgePooling(torch.nn.Module):
@@ -59,8 +99,8 @@ class EdgePooling(torch.nn.Module):
     def __merge_edges__(self, x, edge_index, edge_attr, batch, edge_score):
         nodes_num = set(range(x.size(0)))
 
-        cluster = torch.empty_like(batch, device='cuda')
-        #cluster = torch.zeros((x.size(0)), dtype=torch.int64, device=torch.device('cuda'))
+        cluster = torch.empty_like(batch, device=device)
+        #cluster = torch.zeros((x.size(0)), dtype=torch.int64, device=torch.device(device))
         edge_argsort = torch.argsort(edge_score, descending=True)
 
         # Iterate through all edges, selecting it if it is not incident to
@@ -98,6 +138,8 @@ class EdgePooling(torch.nn.Module):
 
         # We compute the new features as an addition of the old ones.
         new_x = scatter_add(x, cluster, dim=0, dim_size=i)
+        # new_x = scatter_add(src=x, input=cluster, dim=0, )
+        # new_x = scatter_add(input=x, dim=0, src=cluster)
         new_edge_score = edge_score[new_edge_indices]
         if len(nodes_remaining) > 0:
             remaining_score = x.new_ones((new_x.size(0) - len(new_edge_indices), ))
@@ -110,7 +152,7 @@ class EdgePooling(torch.nn.Module):
         最后，我们需要一个过程来组合在两个合并节点结束的边的边特征，因此将被合并。我们相信一个简单的求和法在这里也应该很管用。然而，我们还没有对此进行实验。
         '''
         N = new_x.size(0)
-        new_edge_index, new_edge_attr = coalesce(cluster[edge_index], edge_attr, N, N)  # None should be the edge_attr, how to compute it?
+        new_edge_index, new_edge_attr = coalesce(cluster[edge_index], edge_attr) #, N, N)  # None should be the edge_attr, how to compute it?
 
         new_batch = x.new_empty(new_x.size(0), dtype=torch.long)
         new_batch = new_batch.scatter_(0, cluster, batch)

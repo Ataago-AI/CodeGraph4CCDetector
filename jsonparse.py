@@ -4,13 +4,14 @@ from tqdm import tqdm
 from pathlib import Path
 import torch
 
+device = 'cpu'
 
 def get_adj_node2node(h, edge_index, edge_attr):
-    indices = edge_index.to('cuda')
-    values = torch.ones((len(edge_index[0]))).to('cuda')
+    indices = edge_index.to(device)
+    values = torch.ones((len(edge_index[0]))).to(device)
     adjacency = torch.sparse.FloatTensor(indices, values, torch.Size((len(h),len(h)))).to_dense()
 
-    node2node_features = torch.zeros(len(h)*len(h),edge_attr.size()[1]).to('cuda')
+    node2node_features = torch.zeros(len(h)*len(h),edge_attr.size()[1]).to(device)
     for i in range(len(edge_index[0])):
         node2node_features[len(h)*edge_index[0][i]+edge_index[1][i]] = edge_attr[i]
 
@@ -78,9 +79,9 @@ def saveAllDataToRam(sourceCodePath,jsonVecPath):
                     #edgesAttr.append([0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536])
                     edgesAttr.append([0 for i in range(hidden)])
                 edge_index = [edgeSrc, edgeTag]
-                features = torch.tensor(features, dtype=torch.float32).to('cuda')
-                edge_index = torch.tensor(edge_index, dtype=torch.long).to('cuda')
-                edgesAttr = torch.tensor(edgesAttr, dtype=torch.float32).to('cuda')
+                features = torch.tensor(features, dtype=torch.float32).to(device)
+                edge_index = torch.tensor(edge_index, dtype=torch.long).to(device)
+                edgesAttr = torch.tensor(edgesAttr, dtype=torch.float32).to(device)
                 
                 adjacency, node2node_features = get_adj_node2node(features, edge_index, edgesAttr)
                 ramData[CodePath] = [features, edge_index, edgesAttr, adjacency, node2node_features]
@@ -157,9 +158,9 @@ def saveTestDataToRam(testList,sourceCodePath,jsonVecPath):
                     #edgesAttr.append([0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536, 0.3536])
                     edgesAttr.append([0 for i in range(hidden)])
                 edge_index = [edgeSrc, edgeTag]
-                features = torch.as_tensor(features, dtype=torch.float32).to('cuda')
-                edge_index = torch.as_tensor(edge_index, dtype=torch.long).to('cuda')
-                edgesAttr = torch.as_tensor(edgesAttr, dtype=torch.float32).to('cuda')
+                features = torch.as_tensor(features, dtype=torch.float32).to(device)
+                edge_index = torch.as_tensor(edge_index, dtype=torch.long).to(device)
+                edgesAttr = torch.as_tensor(edgesAttr, dtype=torch.float32).to(device)
                 adjacency, node2node_features = get_adj_node2node(features, edge_index, edgesAttr)
                 ramData[CodePath] = [features, edge_index, edgesAttr, adjacency, node2node_features]
                 count+=1
