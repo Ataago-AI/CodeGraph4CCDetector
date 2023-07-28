@@ -1,10 +1,11 @@
+import os
 import numpy as np
 import torch
 from torch._C import device
 import torch.nn as nn
 import torch.nn.functional as F
 
-device = "cpu"
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
 
 class GraphAttentionLayer(nn.Module):
     """

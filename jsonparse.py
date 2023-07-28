@@ -4,7 +4,7 @@ from tqdm import tqdm
 from pathlib import Path
 import torch
 
-device = 'cpu'
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
 
 def get_adj_node2node(h, edge_index, edge_attr):
     indices = edge_index.to(device)

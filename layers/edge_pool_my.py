@@ -1,5 +1,6 @@
 from collections import namedtuple
 from typing import Optional, Tuple
+import os
 
 import torch
 import torch.nn.functional as F
@@ -8,7 +9,7 @@ import torch.nn.functional as F
 # from torch_sparse import coalesce
 from torch_geometric.utils import softmax, coalesce
 
-device = 'cpu'
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
 
 
 def broadcast(src: torch.Tensor, other: torch.Tensor, dim: int):

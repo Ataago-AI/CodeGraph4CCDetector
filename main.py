@@ -1,4 +1,7 @@
 #-*- coding: utf-8 -*-
+import os
+os.environ["DEVICE"] = "cuda:0"
+
 
 import ssl
 
@@ -19,7 +22,6 @@ from myModels.GAT_Edgepool_graphEmb import graphEmb
 from myModels.GAT_Edgepool_bi_lstm import bi_lstm_detect
 
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100)
 parser.add_argument('--batch_size', type=int, default=64)
@@ -35,7 +37,8 @@ parser.add_argument('--dropout', type=int, default=0.1)
 parser.add_argument('--alpha', type=int, default=0.2)
 parser.add_argument("--threshold", default=0)
 args = parser.parse_args()
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+print(device)
 
 def logger(info):
     fold, epoch = info['fold'] + 1, info['epoch']

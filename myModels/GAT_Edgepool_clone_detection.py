@@ -1,3 +1,4 @@
+import os
 import torch
 from torch._C import device
 import torch.nn as nn
@@ -12,7 +13,7 @@ from torch_geometric.nn import (global_mean_pool, JumpingKnowledge)
 from torch_geometric.nn.glob import GlobalAttention
 
 
-device = 'cpu'
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
 
 class CodeCloneDetection(nn.Module):
     def __init__(self, num_layers, hidden, nheads, nclass, dropout, alpha, training):
