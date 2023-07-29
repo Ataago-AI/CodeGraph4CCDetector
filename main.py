@@ -1,12 +1,14 @@
 #-*- coding: utf-8 -*-
 import os
 os.environ["DEVICE"] = "cuda:0"
-
+run_id = 'test-0'
+multiplier = 1
 
 import ssl
 
 ssl._create_default_https_context = ssl._create_unverified_context
 import torch
+from pathlib import Path
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
@@ -24,13 +26,13 @@ from myModels.GAT_Edgepool_bi_lstm import bi_lstm_detect
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--epochs', type=int, default=100)
-parser.add_argument('--batch_size', type=int, default=64)
+parser.add_argument('--batch_size', type=int, default=16)
 parser.add_argument('--lr', type=float, default=0.001)
 parser.add_argument('--lr_decay_factor', type=float, default=0.5)
 parser.add_argument('--weight_decay', type=float, default=5e-4, help='Weight decay (L2 loss on parameters).')
 parser.add_argument('--lr_decay_step_size', type=int, default=50)
 parser.add_argument('--num_layers', type=int, default=4)
-parser.add_argument('--hidden', type=int, default=16)
+parser.add_argument('--hidden', type=int, default=16*multiplier)
 parser.add_argument('--num_classes', type=int, default=2)
 parser.add_argument('--nheads', type=int, default=16)
 parser.add_argument('--dropout', type=int, default=0.1)
@@ -50,6 +52,10 @@ indexdir='DataSetJsonVec/GCJ/javadata/'
 id = '11'
 jsonVecPath = "DataSetJsonVec/GCJ/dataSetCfgGCJ16/"
 sourceCodePath = "googlejam4_src/"
+data_dir = Path("/home/ec22263/ataa/data")
+model_save_dir = data_dir / "model_bin" / 'CodeGraph4CCDetector' / run_id
+if not model_save_dir.exists(): model_save_dir.mkdir(parents=True)
+print(f"{model_save_dir=}")
 #jsonVecPath = "DataSetJsonVec/BCB/BCB-CFG-16v/"
 print(jsonVecPath, " ", id)
 if id=='0':
@@ -121,7 +127,8 @@ criterion=FocalLoss().to(device)
 
 def graph_emb(data,epoch):
     model = graphEmb(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
-    saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
+    # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
+    saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
     model_dict = model.state_dict()
     state_dict = {k:v for k,v in saveModel.items() if k in model_dict.keys()}
     #print(state_dict.keys())
@@ -135,7 +142,8 @@ def graph_emb(data,epoch):
     return h
 def bi_lstm_detection(data,epoch):
     model = bi_lstm_detect(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
-    saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
+    # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
+    saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
     model_dict = model.state_dict()
     state_dict = {k:v for k,v in saveModel.items() if k in model_dict.keys()}
     #print(state_dict.keys())
@@ -154,7 +162,7 @@ def split_batch(init_list, batch_size):
     end_list.append(init_list[-count:]) if count != 0 else end_list
     return end_list
 
-def test(testlist,model_index, ramData, batch_size):
+def test(testlist, model_index, ramData, batch_size):
     graphEmbDict = {}
     print("save graphEmbDict...")
     for codeID in tqdm(ramData):
@@ -229,7 +237,7 @@ def train():
     for name, param in model.named_parameters():
         if param.requires_grad:
             print(name)
-    print("模型总参：", get_parameter_number(model))
+    print("Model Parameters：", get_parameter_number(model))
     print("nheads ", args.nheads," batch_size ", args.batch_size)
     print("dropout = ",args.dropout)
     random.shuffle(trainlist)
@@ -251,11 +259,14 @@ def train():
             recoreds = open("recoreds.txt", 'a')
             
             for data in batch:
+
+                # data = map(lambda tensor: tensor.to(device), data)
                 
                 features1, features2, edge_index1, edge_index2, edgesAttr1, edgesAttr2, adjacency1, adjacency2, node2node_features1, node2node_features2, label = data
                 
                 data = features1, features2, edge_index1, edge_index2, edgesAttr1, edgesAttr2, adjacency1, adjacency2, node2node_features1, node2node_features2
                 
+                data = map(lambda tensor: tensor.to(device), data)
                 label=torch.Tensor([[0,1]]).to(device) if label==1 else torch.Tensor([[1,0]]).to(device)
                 #print("label ",label.device," ",label)
                 output = model(data)
@@ -279,7 +290,7 @@ def train():
             recoreds.write(str(iterations+addNum*14078) +" "+ str(acc.item()) +" "+ str(loss)+"\n")
             recoreds.close()
         #if(epoch%10==0 and epoch>0):
-        torch.save(model.state_dict(), './saveModel/epoch'+str(epoch+addNum)+'.pkl')
+        torch.save(model.state_dict(), model_save_dir / f'epoch{epoch+addNum}.pkl')
         val_recoreds = open("val_recoreds.txt", 'a')
         p,r,f1 = test(validlist,epoch+addNum, ramData, 15000)
         val_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")

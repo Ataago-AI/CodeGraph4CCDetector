@@ -5,6 +5,8 @@ from pathlib import Path
 import torch
 
 device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+device = 'cpu'
+multiplier = 1
 
 def get_adj_node2node(h, edge_index, edge_attr):
     indices = edge_index.to(device)
@@ -37,7 +39,8 @@ def saveAllDataToRam(sourceCodePath,jsonVecPath):
                 edgeSrc = []
                 edgeTag = []
                 edgesAttr = []
-                hidden = 16
+                hidden = 16*multiplier
+                # hidden = 768
                 max_node_token_num = 0
                 for node in data["jsonNodesVec"]:
                     #print("len(data[jsonNodesVec][node])",len(data["jsonNodesVec"][node]))
@@ -49,6 +52,7 @@ def saveAllDataToRam(sourceCodePath,jsonVecPath):
                     nodes.append(i)
                     node_features = []
                     for list in data["jsonNodesVec"][str(i)]:
+                        list *= multiplier
                         if list != None:
                             node_features.append(list)
                     if len(node_features)==0:
@@ -71,7 +75,7 @@ def saveAllDataToRam(sourceCodePath,jsonVecPath):
                     else:
                         edgeSrc.append(int(edge.split("->")[0]))
                         edgeTag.append(int(edge.split("->")[1]))
-                        edgesAttr.append(data["jsonEdgesVec"][edge][0])  # one vec always
+                        edgesAttr.append(data["jsonEdgesVec"][edge][0]*multiplier)  # one vec always
                 
                 for i in range(len(nodes)):
                     edgeSrc.append(i)
