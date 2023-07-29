@@ -12,9 +12,19 @@ from pathlib import Path
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+import pandas as pd
+
+import sys
+import os
+
+__WORKSPACE__ = Path.cwd().parent.parent
+sys.path.append(str(__WORKSPACE__))
+# os.chdir(__WORKSPACE__)
+from src.clone_detection.data.data_gathering import get_id2code, get_labels
+
 from tqdm import tqdm, trange
 import argparse
-from jsonparse import saveAllDataToRam
+from jsonparse import saveAllDataToRam, saveAllDataToRam_v2
 from jsonparse import getCodePairDataList
 from myModels.GAT_Edgepool_clone_detection import CodeCloneDetection
 from layers.Focal_loss import FocalLoss
@@ -48,52 +58,9 @@ def logger(info):
     print('{:02d}/{:03d}: Val Loss: {:.4f}, Test Accuracy: {:.3f}'.format(fold, epoch, val_loss, test_acc))
 
 #----------------------------------------------------------------
-indexdir='DataSetJsonVec/GCJ/javadata/'
-id = '11'
-jsonVecPath = "DataSetJsonVec/GCJ/dataSetCfgGCJ16/"
-sourceCodePath = "googlejam4_src/"
-data_dir = Path("/home/ec22263/ataa/data")
-model_save_dir = data_dir / "model_bin" / 'CodeGraph4CCDetector' / run_id
-if not model_save_dir.exists(): model_save_dir.mkdir(parents=True)
-print(f"{model_save_dir=}")
-#jsonVecPath = "DataSetJsonVec/BCB/BCB-CFG-16v/"
-print(jsonVecPath, " ", id)
-if id=='0':
-    trainfile=open(indexdir+'trainall.txt')
-    validfile = open(indexdir+'valid.txt')
-    testfile = open(indexdir+'test.txt')
-elif id=='13':
-    trainfile = open(indexdir+'train13.txt')
-    validfile = open(indexdir+'valid.txt')
-    testfile = open(indexdir+'test.txt')
-elif id=='11':
-    trainfile = open(indexdir+'train11.txt')
-    validfile = open(indexdir+'valid.txt')
-    testfile = open(indexdir+'test.txt')
-elif id=='0small':
-    trainfile = open(indexdir+'trainsmall.txt')
-    validfile = open(indexdir+'valid.txt')
-    testfile = open(indexdir+'test.txt')
-elif id == '13small':
-    trainfile = open(indexdir+'train13small.txt')
-    validfile = open(indexdir+'validsmall.txt')
-    testfile = open(indexdir+'testsmall.txt')
-elif id=='11small':
-    trainfile = open(indexdir+'train11small.txt')
-    validfile = open(indexdir+'validsmall.txt')
-    testfile = open(indexdir+'testsmall.txt')
-else:
-    print('file not exist')
-    quit()
-trainlist=trainfile.readlines()
-validlist=validfile.readlines()
-testlist=testfile.readlines()
 
-print("trainlist",len(trainlist))
-print("validlist",len(validlist))
-print("testlist",len(testlist))
 
-def getBatch(line_list, batch_size, batch_index, device):
+def getBatch(line_list, batch_size, batch_index, ramData):
     start_line = batch_size*batch_index
     end_line = start_line+batch_size
     dataList = getCodePairDataList(ramData,line_list[start_line:end_line])
@@ -125,7 +92,7 @@ class FocalLoss(nn.Module):
 
 criterion=FocalLoss().to(device)
 
-def graph_emb(data,epoch):
+def graph_emb(data, epoch, model_save_dir):
     model = graphEmb(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
     # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
     saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
@@ -140,7 +107,7 @@ def graph_emb(data,epoch):
     data = features, edge_index, edgesAttr, adjacency, node2node_features
     h = model(data)
     return h
-def bi_lstm_detection(data,epoch):
+def bi_lstm_detection(data,epoch, model_save_dir):
     model = bi_lstm_detect(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
     # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
     saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
@@ -162,12 +129,12 @@ def split_batch(init_list, batch_size):
     end_list.append(init_list[-count:]) if count != 0 else end_list
     return end_list
 
-def test(testlist, model_index, ramData, batch_size):
+def test(testlist, model_index, ramData, batch_size, model_save_dir):
     graphEmbDict = {}
     print("save graphEmbDict...")
     for codeID in tqdm(ramData):
         data = ramData[codeID]
-        graphEmbDict[codeID] = graph_emb(data, model_index).tolist()
+        graphEmbDict[codeID] = graph_emb(data, model_index, model_save_dir).tolist()
 
     notFound = 0
     testCount = 0
@@ -202,7 +169,7 @@ def test(testlist, model_index, ramData, batch_size):
         h2_batch_t = torch.stack(h2_batch, dim=1).squeeze(0)
         #print("h1_batch",h1_batch.shape)
         data = h1_batch_t, h2_batch_t
-        outputs = bi_lstm_detection(data, model_index)
+        outputs = bi_lstm_detection(data, model_index, model_save_dir)
         _, predicted = torch.max(outputs.data, 1)
         y_preds += predicted.tolist()
         y_trues += label_batch
@@ -225,7 +192,7 @@ def get_parameter_number(model):
     trainable_num = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return {'Total': total_num, 'Trainable': trainable_num}
 
-def train():
+def train(model_save_dir, ramData, trainlist, validlist, testlist):
     #start_train_model_index = 7
     addNum = 0
     model = CodeCloneDetection(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, True).to(device)
@@ -253,7 +220,7 @@ def train():
         right = 0
         acc = 0
         for batch_index in tqdm(range(int(len(trainlist)/args.batch_size))):
-            batch = getBatch(trainlist, args.batch_size, batch_index, device)
+            batch = getBatch(trainlist, args.batch_size, batch_index, ramData)
             optimizer.zero_grad()
             batchloss= 0
             recoreds = open("recoreds.txt", 'a')
@@ -292,20 +259,119 @@ def train():
         #if(epoch%10==0 and epoch>0):
         torch.save(model.state_dict(), model_save_dir / f'epoch{epoch+addNum}.pkl')
         val_recoreds = open("val_recoreds.txt", 'a')
-        p,r,f1 = test(validlist,epoch+addNum, ramData, 15000)
+        p,r,f1 = test(validlist,epoch+addNum, ramData, 15000, model_save_dir)
         val_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
         val_recoreds.close()
 
         test_recoreds = open("test_recoreds.txt", 'a')
-        p,r,f1 = test(testlist,epoch+addNum, ramData, 15000)
+        p,r,f1 = test(testlist,epoch+addNum, ramData, 15000, model_save_dir)
         test_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
         test_recoreds.close()
 
 
+if __name__ == '__main__':
+    pass
+
+    indexdir='DataSetJsonVec/GCJ/javadata/'
+    id = 'my_data'
+    jsonVecPath = "DataSetJsonVec/GCJ/dataSetCfgGCJ16/"
+    sourceCodePath = "googlejam4_src/"
+    data_dir = Path("/home/ec22263/ataa/data")
+    data_dir = Path("/Users/ataago/Documents/data")
+    model_save_dir = data_dir / "model_bin" / 'CodeGraph4CCDetector' / run_id
+    if not model_save_dir.exists(): model_save_dir.mkdir(parents=True)
+    print(f"{model_save_dir=}")
+    #jsonVecPath = "DataSetJsonVec/BCB/BCB-CFG-16v/"
+    print(jsonVecPath, " ", id)
+    if id=='0':
+        trainfile=open(indexdir+'trainall.txt')
+        validfile = open(indexdir+'valid.txt')
+        testfile = open(indexdir+'test.txt')
+    elif id=='13':
+        trainfile = open(indexdir+'train13.txt')
+        validfile = open(indexdir+'valid.txt')
+        testfile = open(indexdir+'test.txt')
+    elif id=='11':
+        trainfile = open(indexdir+'train11.txt')
+        validfile = open(indexdir+'valid.txt')
+        testfile = open(indexdir+'test.txt')
+    elif id=='0small':
+        trainfile = open(indexdir+'trainsmall.txt')
+        validfile = open(indexdir+'valid.txt')
+        testfile = open(indexdir+'test.txt')
+    elif id == '13small':
+        trainfile = open(indexdir+'train13small.txt')
+        validfile = open(indexdir+'validsmall.txt')
+        testfile = open(indexdir+'testsmall.txt')
+    elif id=='11small':
+        trainfile = open(indexdir+'train11small.txt')
+        validfile = open(indexdir+'validsmall.txt')
+        testfile = open(indexdir+'testsmall.txt')
+
+    elif id=='my_data':
+        DATA_DIR = Path("/Users/ataago/Documents/data")
+        # FILTERED_FILES_CSV = Path("/Users/ataago/Documents/data/preprocessed/bcb/meta.filtered_static_metrics.v2.csv")
+        DATASET_TYPE = 'bcb'
+
+        # Dataset Dir 
+        DATASET_RAW_DIR = DATA_DIR / "raw" / DATASET_TYPE
+        DATASET_PROCESSED_DIR = DATA_DIR / "preprocessed" / DATASET_TYPE
 
 
-print("add all data to ram...")
-ramData = saveAllDataToRam(sourceCodePath,jsonVecPath)
+        # Raw dataset files
+        DATASET_JSON = DATASET_RAW_DIR / 'data.jsonl'
+        TRAIN_CSV = DATASET_RAW_DIR / 'train.csv'
+        TEST_CSV = DATASET_RAW_DIR / 'test.csv'
+        VALID_CSV = DATASET_RAW_DIR / 'valid.csv'
 
-train()
+        # Processed dataset files
+        FILTERED_FILES_CSV = DATASET_PROCESSED_DIR / 'meta.filtered_static_metrics.v2.csv'
+
+        # Processed data dirs
+        CPG_VECTOR_BIN = DATASET_PROCESSED_DIR / 'cpg_vector_bin'
+
+        # Data Gathering
+        filtered_static_metric_df = pd.read_csv(FILTERED_FILES_CSV)
+        filtered_ids = filtered_static_metric_df['file_id'].tolist()
+        id2code = get_id2code(data_type=DATASET_TYPE, json_file=DATASET_JSON)
+        id2code = dict(filter(lambda x: x[0] in filtered_ids, id2code.items())) # Filtered id2code
+
+        # len(id2code)
+
+        print(f"{FILTERED_FILES_CSV=}")
+        filtered_static_metric_df = pd.read_csv(FILTERED_FILES_CSV)
+        filtered_ids = filtered_static_metric_df['file_id'].tolist()
+
+
+        train_df = get_labels(csv_file=TRAIN_CSV, filtered_ids=filtered_ids)
+        test_df = get_labels(csv_file=TEST_CSV, filtered_ids=filtered_ids)
+        valid_df = get_labels(csv_file=VALID_CSV, filtered_ids=filtered_ids)
+
+        trainlist = [' '.join(map(str, vals)) for vals in train_df.values.tolist()]
+        testlist = [' '.join(map(str, vals)) for vals in test_df.values.tolist()]
+        validlist = [' '.join(map(str, vals)) for vals in valid_df.values.tolist()]
+
+    else:
+        print('file not exist')
+        quit()
+
+    try:
+        trainlist=trainfile.readlines()
+        validlist=validfile.readlines()
+        testlist=testfile.readlines()
+    except:
+        pass
+
+    print("trainlist",len(trainlist))
+    print("validlist",len(validlist))
+    print("testlist",len(testlist))
+
+
+
+    print("add all data to ram...")
+    # ramData = saveAllDataToRam(sourceCodePath,jsonVecPath)
+    ramData = saveAllDataToRam_v2(id2code=id2code, jsonVecPath=CPG_VECTOR_BIN)
+
+
+    train()
 
