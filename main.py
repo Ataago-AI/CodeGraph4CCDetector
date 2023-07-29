@@ -13,6 +13,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pandas as pd
+import numpy as np
+
 
 import sys
 import os
@@ -105,6 +107,7 @@ def graph_emb(data, epoch, model_save_dir):
     model.eval()
     features, edge_index, edgesAttr, adjacency, node2node_features = data
     data = features, edge_index, edgesAttr, adjacency, node2node_features
+    data = map(lambda tensor: tensor.to(device), data)
     h = model(data)
     return h
 def bi_lstm_detection(data,epoch, model_save_dir):
@@ -131,17 +134,19 @@ def split_batch(init_list, batch_size):
 
 def test(testlist, model_index, ramData, batch_size, model_save_dir):
     graphEmbDict = {}
-    print("save graphEmbDict...")
-    for codeID in tqdm(ramData):
+    print("save graphEmbDict... ", end="")
+    for codeID in tqdm(ramData, disable=True):
         data = ramData[codeID]
         graphEmbDict[codeID] = graph_emb(data, model_index, model_save_dir).tolist()
+    print(f"Done.")
 
     notFound = 0
     testCount = 0
     y_preds = []
     y_trues = []
     batches = split_batch(testlist, batch_size)
-    Test_data_batches = trange(len(batches), leave=True, desc = "Test")
+    Test_data_batches = trange(len(batches), leave=True, desc = "Test", disable=True)
+    print(f"Predicting on {len(batches)} batches. ", end="")
     for i in Test_data_batches:
         h1_batch = []
         h2_batch = []
@@ -181,6 +186,7 @@ def test(testlist, model_index, ramData, batch_size, model_save_dir):
         r_a=recall_score(y_trues, y_preds, average='macro')
         p_a=precision_score(y_trues, y_preds, average='macro')
         f_a=f1_score(y_trues, y_preds, average='macro')
+        print(f"Precision: {p_a:.6f}\tRecall: {r_a:.5f}\tF1: {f_a:.6f}")
 
         Test_data_batches.set_description("Test (p_a=%.4g,r_a=%.4g,f_a=%.4g)" % (p_a, r_a, f_a))
     print("testCount",testCount)
@@ -208,7 +214,7 @@ def train(model_save_dir, ramData, trainlist, validlist, testlist):
     print("nheads ", args.nheads," batch_size ", args.batch_size)
     print("dropout = ",args.dropout)
     random.shuffle(trainlist)
-    epochs = trange(args.epochs, leave=True, desc = "Epoch")
+    epochs = trange(args.epochs, leave=True, desc = "Epoch", disable=True)
     iterations = 0
     for epoch in epochs:
         #print(epoch)
@@ -219,7 +225,8 @@ def train(model_save_dir, ramData, trainlist, validlist, testlist):
         count = 0
         right = 0
         acc = 0
-        for batch_index in tqdm(range(int(len(trainlist)/args.batch_size))):
+        total_steps = int(len(trainlist)/args.batch_size)
+        for batch_index in tqdm(range(total_steps), disable=True):
             batch = getBatch(trainlist, args.batch_size, batch_index, ramData)
             optimizer.zero_grad()
             batchloss= 0
@@ -253,18 +260,23 @@ def train(model_save_dir, ramData, trainlist, validlist, testlist):
             main_index = main_index + len(batch)
             loss = totalloss/main_index
             epochs.set_description("Epoch (Loss=%g) (Acc = %g)" % (round(loss,5) , acc))
+            if batch_index % 10 == 0 or batch_index+1 == total_steps:
+                print(f"Epoch [{epoch+1}/{args.epochs}]\t : Batch [{batch_index+1}/{total_steps}]\t : ", end="")
+                print(f"Batch Loss: {loss:.6f}\t: Accuracy: {acc:.6f}")
             iterations += 1
             recoreds.write(str(iterations+addNum*14078) +" "+ str(acc.item()) +" "+ str(loss)+"\n")
             recoreds.close()
         #if(epoch%10==0 and epoch>0):
         torch.save(model.state_dict(), model_save_dir / f'epoch{epoch+addNum}.pkl')
         val_recoreds = open("val_recoreds.txt", 'a')
-        p,r,f1 = test(validlist,epoch+addNum, ramData, 15000, model_save_dir)
+        tmplist = np.random.choice(validlist, size=1_000, replace=False).tolist()
+        p,r,f1 = test(tmplist, epoch+addNum, ramData, 15000, model_save_dir)
         val_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
         val_recoreds.close()
 
         test_recoreds = open("test_recoreds.txt", 'a')
-        p,r,f1 = test(testlist,epoch+addNum, ramData, 15000, model_save_dir)
+        tmplist = np.random.choice(testlist, size=1_000, replace=False).tolist()
+        p,r,f1 = test(tmplist, epoch+addNum, ramData, 15000, model_save_dir)
         test_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
         test_recoreds.close()
 
