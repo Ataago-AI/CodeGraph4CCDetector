@@ -10,6 +10,9 @@ from layers.edge_pool_my import EdgePooling
 from torch_geometric.nn import (global_mean_pool, JumpingKnowledge)
 from torch_geometric.nn.glob import GlobalAttention
 
+import warnings
+warnings.filterwarnings("ignore", message="'nn.glob.GlobalAttention' is deprecated, use 'nn.aggr.AttentionalAggregation' instead")
+
 device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
 
 class graphEmb(nn.Module):
