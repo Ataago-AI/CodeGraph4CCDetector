@@ -94,15 +94,7 @@ class FocalLoss(nn.Module):
 
 criterion=FocalLoss().to(device)
 
-def graph_emb(data, epoch, model_save_dir):
-    model = graphEmb(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
-    # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
-    saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
-    model_dict = model.state_dict()
-    state_dict = {k:v for k,v in saveModel.items() if k in model_dict.keys()}
-    #print(state_dict.keys())
-    model_dict.update(state_dict)
-    model.load_state_dict(model_dict)
+def graph_emb(data, model):
     #print("loaded "+ 'epoch'+str(epoch)+'.pkl')
     model.eval()
     features, edge_index, edgesAttr, adjacency, node2node_features = data
@@ -132,13 +124,28 @@ def split_batch(init_list, batch_size):
     end_list.append(init_list[-count:]) if count != 0 else end_list
     return end_list
 
+def load_graph_model(epoch, model_save_dir):
+    print(f"Loading Model..... ", end="")
+    model = graphEmb(args.num_layers, args.hidden, args.nheads, args.num_classes, args.dropout, args.alpha, False).to(device)
+    # saveModel = torch.load('./saveModel/epoch'+str(epoch)+'.pkl')
+    saveModel = torch.load(model_save_dir / f'epoch{epoch}.pkl')
+    model_dict = model.state_dict()
+    state_dict = {k:v for k,v in saveModel.items() if k in model_dict.keys()}
+    #print(state_dict.keys())
+    model_dict.update(state_dict)
+    model.load_state_dict(model_dict)
+    print(f"Model Loaded....", end=" ")
+    return model
+
 def test(testlist, model_index, ramData, batch_size, model_save_dir):
+
+    g_model = load_graph_model(model_index, model_save_dir)
     graphEmbDict = {}
-    print("save graphEmbDict... ", end="")
+    print("saving graphEmbDict... ", end=" ")
     for codeID in tqdm(ramData, disable=True):
         data = ramData[codeID]
-        graphEmbDict[codeID] = graph_emb(data, model_index, model_save_dir).tolist()
-    print(f"Done.")
+        graphEmbDict[codeID] = graph_emb(data, g_model).tolist()
+    # print(f"Done.")
 
     notFound = 0
     testCount = 0
@@ -146,7 +153,7 @@ def test(testlist, model_index, ramData, batch_size, model_save_dir):
     y_trues = []
     batches = split_batch(testlist, batch_size)
     Test_data_batches = trange(len(batches), leave=True, desc = "Test", disable=True)
-    print(f"Predicting on {len(batches)} batches. ", end="")
+    print(f"Predicting on {len(batches)} batches.. ", end="")
     for i in Test_data_batches:
         h1_batch = []
         h2_batch = []
@@ -186,11 +193,11 @@ def test(testlist, model_index, ramData, batch_size, model_save_dir):
         r_a=recall_score(y_trues, y_preds, average='macro')
         p_a=precision_score(y_trues, y_preds, average='macro')
         f_a=f1_score(y_trues, y_preds, average='macro')
-        print(f"Precision: {p_a:.6f}\tRecall: {r_a:.5f}\tF1: {f_a:.6f}")
+        print(f"Samples: {testCount}\t : Precision: {p_a:.6f}\tRecall: {r_a:.5f}\tF1: {f_a:.6f}")
 
         Test_data_batches.set_description("Test (p_a=%.4g,r_a=%.4g,f_a=%.4g)" % (p_a, r_a, f_a))
-    print("testCount",testCount)
-    print("notFound",notFound)
+    # print("testCount",testCount)
+    # print("notFound",notFound)
     return p_a, r_a, f_a
 
 def get_parameter_number(model):
@@ -268,17 +275,20 @@ def train(model_save_dir, ramData, trainlist, validlist, testlist):
             recoreds.close()
         #if(epoch%10==0 and epoch>0):
         torch.save(model.state_dict(), model_save_dir / f'epoch{epoch+addNum}.pkl')
-        val_recoreds = open("val_recoreds.txt", 'a')
+        print(f"Model saved at: {model_save_dir / f'epoch{epoch+addNum}.pkl'}")
+        # val_recoreds = open("val_recoreds.txt", 'a')
         tmplist = np.random.choice(validlist, size=1_000, replace=False).tolist()
+        print(f"Starting Validation...... ", end="")
         p,r,f1 = test(tmplist, epoch+addNum, ramData, 15000, model_save_dir)
-        val_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
-        val_recoreds.close()
+        # val_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
+        # val_recoreds.close()
 
-        test_recoreds = open("test_recoreds.txt", 'a')
+        # test_recoreds = open("test_recoreds.txt", 'a')
+        print(f"Starting Testing...... ", end="")
         tmplist = np.random.choice(testlist, size=1_000, replace=False).tolist()
         p,r,f1 = test(tmplist, epoch+addNum, ramData, 15000, model_save_dir)
-        test_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
-        test_recoreds.close()
+        # test_recoreds.write(str(epoch+addNum) +" "+ str(p) +" "+ str(r) +" "+ str(f1)+"\n")
+        # test_recoreds.close()
 
 
 if __name__ == '__main__':
