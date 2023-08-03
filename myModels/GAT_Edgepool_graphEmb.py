@@ -14,6 +14,7 @@ import warnings
 warnings.filterwarnings("ignore", message="'nn.glob.GlobalAttention' is deprecated, use 'nn.aggr.AttentionalAggregation' instead")
 
 device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+print(f"{__file__} DEVICE: {device}")
 
 class graphEmb(nn.Module):
     def __init__(self, num_layers, hidden, nheads, nclass, dropout, alpha, training):

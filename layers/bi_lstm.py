@@ -1,6 +1,9 @@
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
+import os
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+print(f"{__file__} DEVICE: {device}")
 
 class LSTMModel(nn.Module):
     def __init__(self, input_dim, hidden_dim, layer_dim, output_dim):
@@ -28,13 +31,13 @@ class LSTMModel(nn.Module):
 
         if torch.cuda.is_available():
             #(num_layers * num_directions, batch, hidden_size)
-            h0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim).cuda())
+            h0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim).to(device))
         else:
             h0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim))
         
         # Initialize cell state
         if torch.cuda.is_available():
-            c0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim).cuda())
+            c0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim).to(device=device))
         else:
             c0 = Variable(torch.zeros(self.layer_dim*2, x.size(0), self.hidden_dim))
         

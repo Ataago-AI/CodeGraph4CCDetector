@@ -8,11 +8,11 @@ import multiprocessing
 
 
 __WORKSPACE__ = Path.cwd().parent.parent
-print(f"{__WORKSPACE__=}")
 sys.path.append(str(__WORKSPACE__))
 from configs.conf_parser import ProgramingLanguage as Lang
 
 device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+print(f"{__file__} DEVICE: {device}")
 device = 'cpu'
 multiplier = 1
 

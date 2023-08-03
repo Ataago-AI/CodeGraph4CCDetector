@@ -3,8 +3,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import os
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
+device = os.getenv("DEVICE", "cuda") if torch.cuda.is_available() else "cpu"
+print(f"{__file__} DEVICE: {device}")
+
 class SingleNodeAttentionLayer(nn.Module):
     
     def __init__(self, in_features, out_features, dropout, alpha, concat=True):
